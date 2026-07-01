@@ -458,8 +458,8 @@ PinyinTabbedCandidateList::PinyinTabbedCandidateList(
 
 std::span<const CandidateAction> PinyinTabbedCandidateList::tabActions() {
     auto *state = inputContext_->propertyFor(&engine_->factory());
-    if (state->mode_ == PinyinMode::StrokeFilter) {
-        return strokeActions_;
+    if (state->mode_ == PinyinMode::Filter) {
+        return filterActions_;
     }
     if (!actions_) {
         buildTabActions();
@@ -552,28 +552,28 @@ void PinyinTabbedCandidateList::buildTabActions() {
 
     actions_ = std::move(actions);
 
-    strokeActions_.clear();
-    strokeActions_.emplace_back();
-    strokeActions_.back().setId(STROKE_SUB_ACTION_H);
-    strokeActions_.back().setText("一");
-    strokeActions_.emplace_back();
-    strokeActions_.back().setId(STROKE_SUB_ACTION_S);
-    strokeActions_.back().setText("丨");
-    strokeActions_.emplace_back();
-    strokeActions_.back().setId(STROKE_SUB_ACTION_P);
-    strokeActions_.back().setText("ノ");
-    strokeActions_.emplace_back();
-    strokeActions_.back().setId(STROKE_SUB_ACTION_N);
-    strokeActions_.back().setText("㇏");
-    strokeActions_.emplace_back();
-    strokeActions_.back().setId(STROKE_SUB_ACTION_Z);
-    strokeActions_.back().setText("𠃍");
-    strokeActions_.emplace_back();
-    strokeActions_.back().setId(SEPARATOR_ACTION);
-    strokeActions_.back().setSeparator(true);
-    strokeActions_.emplace_back();
-    strokeActions_.back().setId(STROKE_SUB_ACTION_RETURN);
-    strokeActions_.back().setText("返回");
+    filterActions_.clear();
+    filterActions_.emplace_back();
+    filterActions_.back().setId(STROKE_SUB_ACTION_H);
+    filterActions_.back().setText("一");
+    filterActions_.emplace_back();
+    filterActions_.back().setId(STROKE_SUB_ACTION_S);
+    filterActions_.back().setText("丨");
+    filterActions_.emplace_back();
+    filterActions_.back().setId(STROKE_SUB_ACTION_P);
+    filterActions_.back().setText("ノ");
+    filterActions_.emplace_back();
+    filterActions_.back().setId(STROKE_SUB_ACTION_N);
+    filterActions_.back().setText("㇏");
+    filterActions_.emplace_back();
+    filterActions_.back().setId(STROKE_SUB_ACTION_Z);
+    filterActions_.back().setText("𠃍");
+    filterActions_.emplace_back();
+    filterActions_.back().setId(SEPARATOR_ACTION);
+    filterActions_.back().setSeparator(true);
+    filterActions_.emplace_back();
+    filterActions_.back().setId(STROKE_SUB_ACTION_RETURN);
+    filterActions_.back().setText("返回");
 }
 
 void PinyinTabbedCandidateList::triggerTabAction(int id) {
@@ -584,16 +584,16 @@ void PinyinTabbedCandidateList::triggerTabAction(int id) {
     }
 
     auto *state = inputContext_->propertyFor(&engine_->factory());
-    if (state->mode_ == PinyinMode::StrokeFilter) {
-        triggerStrokeAction(state, id);
+    if (state->mode_ == PinyinMode::Filter) {
+        triggerFilterAction(state, id);
     } else {
         triggerMainAction(state, id);
     }
 }
 
-void PinyinTabbedCandidateList::triggerStrokeAction(PinyinState *state,
+void PinyinTabbedCandidateList::triggerFilterAction(PinyinState *state,
                                                     int id) {
-    assert(state->mode_ == PinyinMode::StrokeFilter);
+    assert(state->mode_ == PinyinMode::Filter);
 
     switch (id) {
     case STROKE_SUB_ACTION_H:
@@ -601,10 +601,11 @@ void PinyinTabbedCandidateList::triggerStrokeAction(PinyinState *state,
     case STROKE_SUB_ACTION_P:
     case STROKE_SUB_ACTION_N:
     case STROKE_SUB_ACTION_Z:
-        state->strokeBuffer_.type(STROKE_SUB_ACTION_H - id + '1');
+        state->filter_.activeFilter_ = CandidateFilter::Stroke;
+        state->filter_.strokeBuffer_.type(STROKE_SUB_ACTION_H - id + '1');
         break;
     case STROKE_SUB_ACTION_RETURN:
-        engine_->resetStroke(inputContext_);
+        engine_->resetFilter(inputContext_);
         break;
     default:
         return;
@@ -631,7 +632,8 @@ void PinyinTabbedCandidateList::triggerMainAction(PinyinState *state, int id) {
     std::optional<int> checkableActionIndex;
     // negative id is special action.
     if (id == STROKE_ACTION) {
-        state->mode_ = PinyinMode::StrokeFilter;
+        state->mode_ = PinyinMode::Filter;
+        state->filter_.activeFilter_ = CandidateFilter::Stroke;
     } else if (checkableActionIndex = idToActionIndex(id);
                !checkableActionIndex) {
         return;

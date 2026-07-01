@@ -304,7 +304,7 @@ public:
     bool filter(const CandidateWord &candidate) const;
 
 private:
-    void triggerStrokeAction(PinyinState *state, int id);
+    void triggerFilterAction(PinyinState *state, int id);
     void triggerMainAction(PinyinState *state, int id);
 
     std::optional<int> idToActionIndex(int id) const;
@@ -329,7 +329,7 @@ private:
 
     // Lazily initialized actions, since it requires scan all actions.
     std::optional<std::vector<CandidateAction>> actions_;
-    std::vector<CandidateAction> strokeActions_;
+    std::vector<CandidateAction> filterActions_;
     std::optional<int> checkedPinyinActionId_ = std::nullopt;
     bool checkedSingleAction_ = false;
     std::vector<std::unordered_set<int>> actionIdToCandidates_;

@@ -373,7 +373,14 @@ struct EventSourceTime;
 class CandidateList;
 class PinyinEngine;
 
-enum class PinyinMode { Normal, StrokeFilter, ForgetCandidate, Punctuation };
+enum class PinyinMode { Normal, Filter, ForgetCandidate, Punctuation };
+
+struct CandidateFilterState {
+    bool empty() const { return strokeBuffer_.empty(); }
+    void clear() { strokeBuffer_.clear(); }
+
+    InputBuffer strokeBuffer_;
+};
 
 class PinyinState : public InputContextProperty {
 public:
@@ -384,8 +391,8 @@ public:
 
     PinyinMode mode_ = PinyinMode::Normal;
 
-    // Stroke filter
-    InputBuffer strokeBuffer_;
+    // Candidate filter.
+    CandidateFilterState filter_;
 
     // Forget candidate
     std::shared_ptr<CandidateList> forgetCandidateList_;
@@ -444,7 +451,7 @@ public:
     void updateUI(InputContext *inputContext);
     void updateFilter(InputContext *inputContext);
 
-    void resetStroke(InputContext *inputContext) const;
+    void resetFilter(InputContext *inputContext) const;
     void resetForgetCandidate(InputContext *inputContext) const;
     void forgetCandidate(InputContext *inputContext, size_t index);
     void pinCustomPhrase(InputContext *inputContext,
@@ -466,8 +473,8 @@ private:
     bool handleCandidateList(KeyEvent &event,
                              const std::shared_future<uint32_t> &keyChr);
     bool handleNextPage(KeyEvent &event) const;
-    bool handleStrokeFilter(KeyEvent &event,
-                            const std::shared_future<uint32_t> &keyChr);
+    bool handleFilter(KeyEvent &event,
+                      const std::shared_future<uint32_t> &keyChr);
     bool handleForgetCandidate(KeyEvent &event);
     bool handlePunc(KeyEvent &event,
                     const std::shared_future<uint32_t> &keyChr);
