@@ -1,5 +1,6 @@
 set(PINYIN_SOURCES
     pinyin.cpp
+    chaizi.cpp
     customphrase.cpp
     symboldictionary.cpp
     workerthread.cpp
@@ -33,9 +34,29 @@ install(FILES "sp.dat.example" DESTINATION "${FCITX_INSTALL_PKGDATADIR}/pinyin" 
 if (ENABLE_DATA)
 
   add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/chaizi.txt"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/chaizi.txt"
+      "${CMAKE_CURRENT_SOURCE_DIR}/chaizi-filter-out.txt"
+      "${CMAKE_SOURCE_DIR}/cmake/FilterChaizi.cmake"
+    COMMAND
+      "${CMAKE_COMMAND}"
+      -DINPUT="${CMAKE_CURRENT_SOURCE_DIR}/chaizi.txt"
+      -DEXCLUDE="${CMAKE_CURRENT_SOURCE_DIR}/chaizi-filter-out.txt"
+      -DOUTPUT="${CMAKE_CURRENT_BINARY_DIR}/chaizi.txt"
+      -P "${CMAKE_SOURCE_DIR}/cmake/FilterChaizi.cmake")
+  add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/chaizi.dict"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/chaizi.txt" LibIME::pinyindict
-    COMMAND LibIME::pinyindict "${CMAKE_CURRENT_SOURCE_DIR}/chaizi.txt" "${CMAKE_CURRENT_BINARY_DIR}/chaizi.dict")
-  add_custom_target(chaizi-dict ALL DEPENDS "chaizi.dict")
+    DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/chaizi.txt" LibIME::pinyindict
+    COMMAND LibIME::pinyindict "${CMAKE_CURRENT_BINARY_DIR}/chaizi.txt" "${CMAKE_CURRENT_BINARY_DIR}/chaizi.dict")
+  add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/chaizi-filter.txt"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/chaizi.txt"
+    COMMAND
+      "${CMAKE_COMMAND}" -E copy
+      "${CMAKE_CURRENT_SOURCE_DIR}/chaizi.txt"
+      "${CMAKE_CURRENT_BINARY_DIR}/chaizi-filter.txt")
+  add_custom_target(chaizi-dict ALL DEPENDS "chaizi.dict" "chaizi-filter.txt")
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/chaizi.dict" DESTINATION "${FCITX_INSTALL_PKGDATADIR}/pinyin")
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/chaizi-filter.txt" DESTINATION "${FCITX_INSTALL_PKGDATADIR}/pinyin")
 endif()

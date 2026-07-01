@@ -7,6 +7,7 @@
 #ifndef _PINYIN_PINYIN_H_
 #define _PINYIN_PINYIN_H_
 
+#include "chaizi.h"
 #include "customphrase.h"
 #include "symboldictionary.h"
 #include "workerthread.h"
@@ -374,12 +375,21 @@ class CandidateList;
 class PinyinEngine;
 
 enum class PinyinMode { Normal, Filter, ForgetCandidate, Punctuation };
+enum class CandidateFilter { Stroke, Chaizi };
 
 struct CandidateFilterState {
-    bool empty() const { return strokeBuffer_.empty(); }
-    void clear() { strokeBuffer_.clear(); }
+    bool empty() const {
+        return strokeBuffer_.empty() && chaiziBuffer_.empty();
+    }
+    void clear() {
+        strokeBuffer_.clear();
+        chaiziBuffer_.clear();
+        activeFilter_ = CandidateFilter::Stroke;
+    }
 
+    CandidateFilter activeFilter_ = CandidateFilter::Stroke;
     InputBuffer strokeBuffer_;
+    InputBuffer chaiziBuffer_;
 };
 
 class PinyinState : public InputContextProperty {
@@ -444,6 +454,7 @@ public:
 
     libime::PinyinIME *ime() { return ime_.get(); }
     const auto &config() const { return config_; }
+    const auto &chaiziFilter() const { return chaiziFilter_; }
 
     void initPredict(InputContext *inputContext);
     void updatePredict(InputContext *inputContext);
@@ -505,6 +516,7 @@ private:
     void loadBuiltInDict();
     void loadExtraDict();
     void loadCustomPhrase();
+    void loadChaiziFilter();
     void loadSymbols(const UnixFD &file);
     void loadDict(const std::string &fullPath,
                   std::list<std::unique_ptr<TaskToken>> &taskTokens);
@@ -525,6 +537,7 @@ private:
     std::unique_ptr<HandlerTableEntry<EventHandler>> event_;
     CustomPhraseDict customPhrase_;
     SymbolDict symbols_;
+    ChaiziIndex chaiziFilter_;
     WorkerThread worker_;
     std::list<std::unique_ptr<TaskToken>> persistentTask_;
     std::list<std::unique_ptr<TaskToken>> tasks_;

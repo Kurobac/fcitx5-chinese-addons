@@ -813,6 +813,7 @@ PinyinEngine::PinyinEngine(Instance *instance)
 
     ime_->setScoreFilter(1);
     loadBuiltInDict();
+    loadChaiziFilter();
     reloadConfig();
     loadExtraDict();
     loadCustomPhrase();
@@ -905,6 +906,27 @@ void PinyinEngine::loadSymbols(const UnixFD &file) {
         symbols_.load(in);
     } catch (const std::exception &e) {
         PINYIN_ERROR() << "Failed to load symbol dict: " << e.what();
+    }
+}
+
+void PinyinEngine::loadChaiziFilter() {
+    const auto &standardPath = StandardPaths::global();
+    auto file = standardPath.open(StandardPathsType::PkgData,
+                                  "pinyin/chaizi-filter.txt");
+    if (!file.isValid()) {
+        chaiziFilter_.clear();
+        PINYIN_ERROR() << "Failed to open chaizi filter data.";
+        return;
+    }
+
+    IFDStreamBuf buffer(file.fd());
+    std::istream in(&buffer);
+    try {
+        PINYIN_DEBUG() << "Loading chaizi filter data.";
+        chaiziFilter_.load(in);
+    } catch (const std::exception &e) {
+        chaiziFilter_.clear();
+        PINYIN_ERROR() << "Failed to load chaizi filter data: " << e.what();
     }
 }
 
