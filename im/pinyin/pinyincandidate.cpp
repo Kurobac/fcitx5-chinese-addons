@@ -545,10 +545,12 @@ void PinyinTabbedCandidateList::buildTabActions() {
 
     actions.push_back(std::move(separator));
 
-    CandidateAction stroke;
-    stroke.setId(STROKE_ACTION);
-    stroke.setText("笔画");
-    actions.push_back(std::move(stroke));
+    if (*engine_->config().candidateFilter == CandidateFilterSet::Stroke) {
+        CandidateAction stroke;
+        stroke.setId(STROKE_ACTION);
+        stroke.setText("笔画");
+        actions.push_back(std::move(stroke));
+    }
 
     actions_ = std::move(actions);
 
@@ -601,8 +603,7 @@ void PinyinTabbedCandidateList::triggerFilterAction(PinyinState *state,
     case STROKE_SUB_ACTION_P:
     case STROKE_SUB_ACTION_N:
     case STROKE_SUB_ACTION_Z:
-        state->filter_.activeFilter_ = CandidateFilter::Stroke;
-        state->filter_.strokeBuffer_.type(STROKE_SUB_ACTION_H - id + '1');
+        state->filter_.buffer_.type("hspnz"[STROKE_SUB_ACTION_H - id]);
         break;
     case STROKE_SUB_ACTION_RETURN:
         engine_->resetFilter(inputContext_);
@@ -633,7 +634,6 @@ void PinyinTabbedCandidateList::triggerMainAction(PinyinState *state, int id) {
     // negative id is special action.
     if (id == STROKE_ACTION) {
         state->mode_ = PinyinMode::Filter;
-        state->filter_.activeFilter_ = CandidateFilter::Stroke;
     } else if (checkableActionIndex = idToActionIndex(id);
                !checkableActionIndex) {
         return;

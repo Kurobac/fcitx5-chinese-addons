@@ -110,6 +110,11 @@ enum class PreeditMode { No, ComposingPinyin, CommitPreview };
 FCITX_CONFIG_ENUM_NAME_WITH_I18N(PreeditMode, N_("Do not show"),
                                  N_("Composing pinyin"), N_("Commit preview"))
 
+enum class CandidateFilterSet { Stroke, Chaizi, StrokeAndChaizi };
+
+FCITX_CONFIG_ENUM_NAME_WITH_I18N(CandidateFilterSet, N_("Stroke"),
+                                 N_("Chaizi"), N_("Stroke and Chaizi"))
+
 enum class BackspaceBehaviorOnPrediction {
     OnlyClearCandidates,
     ClearCandidatesAndBackspace,
@@ -317,9 +322,12 @@ FCITX_CONFIGURATION(
     KeyListOption selectByStroke{
         this,
         "FilterByStroke",
-        _("Filter by stroke"),
+        _("Filter candidates"),
         {Key("grave")},
         KeyListConstrain({KeyConstrainFlag::AllowModifierLess})};
+    OptionWithAnnotation<CandidateFilterSet, CandidateFilterSetI18NAnnotation>
+        candidateFilter{this, "CandidateFilter", _("Filter mode"),
+                        CandidateFilterSet::Stroke};
     Option<int, IntConstrain> nbest{this, "Number of sentence",
                                     _("Number of Sentences"), 2,
                                     IntConstrain(1, 3)};
@@ -375,21 +383,14 @@ class CandidateList;
 class PinyinEngine;
 
 enum class PinyinMode { Normal, Filter, ForgetCandidate, Punctuation };
-enum class CandidateFilter { Stroke, Chaizi };
 
 struct CandidateFilterState {
-    bool empty() const {
-        return strokeBuffer_.empty() && chaiziBuffer_.empty();
-    }
+    bool empty() const { return buffer_.empty(); }
     void clear() {
-        strokeBuffer_.clear();
-        chaiziBuffer_.clear();
-        activeFilter_ = CandidateFilter::Stroke;
+        buffer_.clear();
     }
 
-    CandidateFilter activeFilter_ = CandidateFilter::Stroke;
-    InputBuffer strokeBuffer_;
-    InputBuffer chaiziBuffer_;
+    InputBuffer buffer_;
 };
 
 class PinyinState : public InputContextProperty {
@@ -501,6 +502,7 @@ private:
     void updateForgetCandidate(InputContext *inputContext);
 
     void updatePreedit(InputContext *inputContext) const;
+    std::string chaiziFilterInput(const PinyinState *state) const;
     void updatePuncCandidate(InputContext *inputContext,
                              const std::string &original,
                              const std::vector<std::string> &candidates) const;

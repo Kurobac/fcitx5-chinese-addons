@@ -78,6 +78,7 @@
 #include <libime/pinyin/pinyinime.h>
 #include <libime/pinyin/pinyinprediction.h>
 #include <libime/pinyin/shuangpinprofile.h>
+#include <limits>
 #include <list>
 #include <memory>
 #include <optional>
@@ -1520,17 +1521,80 @@ bool PinyinEngine::handleNextPage(KeyEvent &event) const {
     return false;
 }
 
+namespace {
+std::string strokeFilterInput(std::string_view input) {
+    static const std::unordered_map<char, char> strokeMap{
+        {'h', '1'}, {'s', '2'}, {'p', '3'}, {'n', '4'}, {'z', '5'}};
+    std::string result;
+    result.reserve(input.size());
+    for (auto c : input) {
+        auto iter = strokeMap.find(c);
+        if (iter == strokeMap.end()) {
+            return {};
+        }
+        result.push_back(iter->second);
+    }
+    return result;
+}
+
+char strokeFilterKey(const Key &key) {
+    if (key.check(FcitxKey_h)) {
+        return 'h';
+    }
+    if (key.check(FcitxKey_s)) {
+        return 's';
+    }
+    if (key.check(FcitxKey_p)) {
+        return 'p';
+    }
+    if (key.check(FcitxKey_n)) {
+        return 'n';
+    }
+    if (key.check(FcitxKey_z)) {
+        return 'z';
+    }
+    return '\0';
+}
+
+bool candidateFilterUsesStroke(CandidateFilterSet filterSet) {
+    return filterSet == CandidateFilterSet::Stroke ||
+           filterSet == CandidateFilterSet::StrokeAndChaizi;
+}
+
+bool candidateFilterUsesChaizi(CandidateFilterSet filterSet) {
+    return filterSet == CandidateFilterSet::Chaizi ||
+           filterSet == CandidateFilterSet::StrokeAndChaizi;
+}
+} // namespace
+
 void PinyinEngine::updateFilter(InputContext *inputContext) {
     auto *state = inputContext->propertyFor(&factory_);
     auto &inputPanel = inputContext->inputPanel();
+    auto filterSet = *config_.candidateFilter;
+    auto input = state->filter_.buffer_.userInput();
+    auto strokeInput =
+        candidateFilterUsesStroke(filterSet) ? strokeFilterInput(input) : "";
+    auto chaiziInput =
+        candidateFilterUsesChaizi(filterSet) ? chaiziFilterInput(state) : "";
 
     updatePreedit(inputContext);
     Text aux;
-    if (state->mode_ == PinyinMode::Filter &&
-        state->filter_.activeFilter_ == CandidateFilter::Stroke) {
-        aux.append(_("[Stroke Filtering]"));
-        aux.append(pinyinhelper()->call<IPinyinHelper::prettyStrokeString>(
-            state->filter_.strokeBuffer_.userInput()));
+    if (state->mode_ == PinyinMode::Filter) {
+        switch (filterSet) {
+        case CandidateFilterSet::Stroke:
+            aux.append(_("[Stroke Filtering]"));
+            aux.append(pinyinhelper()->call<IPinyinHelper::prettyStrokeString>(
+                strokeInput));
+            break;
+        case CandidateFilterSet::Chaizi:
+            aux.append(_("[Chaizi Filtering]"));
+            aux.append(input);
+            break;
+        case CandidateFilterSet::StrokeAndChaizi:
+            aux.append(_("[Filter]"));
+            aux.append(input);
+            break;
+        }
     }
     inputPanel.setAuxUp(aux);
     inputPanel.setAuxDown(Text());
@@ -1544,23 +1608,22 @@ void PinyinEngine::updateFilter(InputContext *inputContext) {
             (!pinyinTabbed || !pinyinTabbed->checked())) {
             candidateList->clearFilter();
         } else {
-            candidateList->setFilter([this, pinyinTabbed,
+            candidateList->setFilter([this, pinyinTabbed, strokeInput,
+                                      chaiziInput,
                                       state](const CandidateWord &candidate)
                                          -> bool {
                 if (pinyinTabbed && !pinyinTabbed->filter(candidate)) {
                     return false;
                 }
-                switch (state->filter_.activeFilter_) {
-                case CandidateFilter::Stroke: {
-                    if (state->filter_.strokeBuffer_.empty()) {
-                        return true;
-                    }
-                    // For stroke candidate, skip if we are doing candidate
-                    // filter.
-                    if (dynamic_cast<const StrokeCandidateWord *>(&candidate)) {
-                        return false;
-                    }
-                    auto str = candidate.text().toStringForCommit();
+                if (state->filter_.empty()) {
+                    return true;
+                }
+                // For stroke candidate, skip if we are doing candidate filter.
+                if (dynamic_cast<const StrokeCandidateWord *>(&candidate)) {
+                    return false;
+                }
+                auto str = candidate.text().toStringForCommit();
+                if (!strokeInput.empty()) {
                     if (auto length = utf8::lengthValidated(str);
                         length != utf8::INVALID_LENGTH && length >= 1) {
                         auto charRange = utf8::MakeUTF8CharRange(str);
@@ -1573,26 +1636,14 @@ void PinyinEngine::updateFilter(InputContext *inputContext) {
                                 pinyinhelper()
                                     ->call<IPinyinHelper::reverseLookupStroke>(
                                         chr);
-                            if (stroke.starts_with(
-                                    state->filter_.strokeBuffer_.userInput())) {
+                            if (stroke.starts_with(strokeInput)) {
                                 return true;
                             }
                         }
                     }
-                    return false;
                 }
-                case CandidateFilter::Chaizi:
-                    if (state->filter_.chaiziBuffer_.empty()) {
-                        return true;
-                    }
-                    if (dynamic_cast<const StrokeCandidateWord *>(&candidate)) {
-                        return false;
-                    }
-                    return chaiziFilter_.matchAnyChar(
-                        candidate.text().toStringForCommit(),
-                        state->filter_.chaiziBuffer_.userInput());
-                }
-                return true;
+                return !chaiziInput.empty() &&
+                       chaiziFilter_.matchAnyChar(str, chaiziInput);
             });
         }
 
@@ -1743,10 +1794,13 @@ bool PinyinEngine::handleFilter(KeyEvent &event,
     auto candidateList = inputContext->inputPanel().candidateList();
     auto *state = inputContext->propertyFor(&factory_);
     if (state->mode_ == PinyinMode::Normal) {
+        auto filterSet = *config_.candidateFilter;
         if (candidateList && !candidateList->empty() &&
             candidateList->toBulk() &&
             event.key().checkKeyList(*config_.selectByStroke) &&
-            pinyinhelper()) {
+            (!candidateFilterUsesStroke(filterSet) || pinyinhelper()) &&
+            (!candidateFilterUsesChaizi(filterSet) ||
+             !chaiziFilter_.empty())) {
             resetFilter(inputContext);
             state->mode_ = PinyinMode::Filter;
             updateFilter(inputContext);
@@ -1790,17 +1844,8 @@ bool PinyinEngine::handleFilter(KeyEvent &event,
     }
     if (event.key().check(FcitxKey_BackSpace)) {
         // Do backspace if filter input is not empty.
-        auto *buffer = &state->filter_.strokeBuffer_;
-        switch (state->filter_.activeFilter_) {
-        case CandidateFilter::Stroke:
-            buffer = &state->filter_.strokeBuffer_;
-            break;
-        case CandidateFilter::Chaizi:
-            buffer = &state->filter_.chaiziBuffer_;
-            break;
-        }
-        if (!buffer->empty()) {
-            buffer->backspace();
+        if (!state->filter_.buffer_.empty()) {
+            state->filter_.buffer_.backspace();
             updateFilter(inputContext);
         } else {
             // Exit filter mode when filter input is empty.
@@ -1815,21 +1860,30 @@ bool PinyinEngine::handleFilter(KeyEvent &event,
         return true;
     }
 
-    if (state->filter_.activeFilter_ == CandidateFilter::Stroke &&
-        (event.key().check(FcitxKey_h) || event.key().check(FcitxKey_p) ||
-         event.key().check(FcitxKey_s) || event.key().check(FcitxKey_n) ||
-         event.key().check(FcitxKey_z))) {
-        static const std::unordered_map<FcitxKeySym, char> strokeMap{
-            {FcitxKey_h, '1'},
-            {FcitxKey_s, '2'},
-            {FcitxKey_p, '3'},
-            {FcitxKey_n, '4'},
-            {FcitxKey_z, '5'}};
-        if (auto iter = strokeMap.find(event.key().sym());
-            iter != strokeMap.end()) {
-            state->filter_.strokeBuffer_.type(iter->second);
-            updateFilter(inputContext);
+    auto filterSet = *config_.candidateFilter;
+    auto strokeKey = candidateFilterUsesStroke(filterSet)
+                         ? strokeFilterKey(event.key())
+                         : '\0';
+    auto acceptChaiziInput = [this, state, c, filterSet]() {
+        if (!candidateFilterUsesChaizi(filterSet)) {
+            return false;
         }
+        if (!state->context_.useShuangpin()) {
+            return c >= 'a' && c <= 'z';
+        }
+        auto shuangpinProfile = ime_->shuangpinProfile();
+        if (!shuangpinProfile || c > std::numeric_limits<char>::max()) {
+            return false;
+        }
+        auto chr = static_cast<char>(c);
+        return state->filter_.buffer_.empty()
+                   ? shuangpinProfile->validInitial().contains(chr)
+                   : shuangpinProfile->validInput().contains(chr);
+    };
+
+    if (strokeKey || acceptChaiziInput()) {
+        state->filter_.buffer_.type(strokeKey ? strokeKey : c);
+        updateFilter(inputContext);
     }
 
     return true;
@@ -2021,6 +2075,37 @@ void PinyinEngine::resetPredict(InputContext *inputContext) {
     inputContext->inputPanel().reset();
     inputContext->updatePreedit();
     inputContext->updateUserInterface(UserInterfaceComponent::InputPanel);
+}
+
+std::string PinyinEngine::chaiziFilterInput(const PinyinState *state) const {
+    auto input = state->filter_.buffer_.userInput();
+    if (input.empty() || !state->context_.useShuangpin()) {
+        return input;
+    }
+
+    auto shuangpinProfile = ime_->shuangpinProfile();
+    if (!shuangpinProfile) {
+        return {};
+    }
+
+    std::string result;
+    for (size_t i = 0; i < input.size(); i += 2) {
+        auto syls = libime::PinyinEncoder::shuangpinToSyllablesWithFuzzyFlags(
+            std::string_view(input).substr(
+                i, std::min<size_t>(2, input.size() - i)),
+            *shuangpinProfile, ime_->fuzzyFlags());
+        if (syls.empty() || syls.front().second.empty()) {
+            return {};
+        }
+
+        auto pinyin = libime::PinyinEncoder::initialFinalToPinyinString(
+            syls.front().first, syls.front().second.front().first);
+        if (pinyin.empty()) {
+            return {};
+        }
+        result.append(pinyin);
+    }
+    return result;
 }
 
 void PinyinEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {

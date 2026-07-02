@@ -409,6 +409,86 @@ void testPinyinTabFilter(Instance *instance) {
     });
 }
 
+void testChaiziFilter(Instance *instance) {
+    instance->eventDispatcher().schedule([instance]() {
+        auto *pinyin = instance->addonManager().addon("pinyin");
+        FCITX_ASSERT(pinyin);
+        auto setCandidateFilter = [pinyin](const char *filter) {
+            RawConfig config;
+            config.setValueByPath("CandidateFilter", filter);
+            pinyin->setConfig(config);
+        };
+        setCandidateFilter("Chaizi");
+
+        auto *testfrontend = instance->addonManager().addon("testfrontend");
+        auto uuid =
+            testfrontend->call<ITestFrontend::createInputContext>("testapp");
+        auto *ic = instance->inputContextManager().findByUUID(uuid);
+        FCITX_ASSERT(ic);
+        instance->setCurrentInputMethod(ic, "pinyin", true);
+
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("q"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("i"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("n"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("g"), false);
+        findCandidateOrDie(ic, "清");
+        findCandidateOrDie(ic, "青");
+
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("`"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("s"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("h"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("u"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("i"), false);
+        findCandidateOrDie(ic, "清");
+        FCITX_ASSERT(findCandidate(ic, "青") < 0);
+
+        uuid = testfrontend->call<ITestFrontend::createInputContext>("testapp");
+        ic = instance->inputContextManager().findByUUID(uuid);
+        FCITX_ASSERT(ic);
+        instance->setCurrentInputMethod(ic, "shuangpin", true);
+
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("q"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("y"), false);
+        findCandidateOrDie(ic, "清");
+        findCandidateOrDie(ic, "青");
+
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("`"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("u"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("v"), false);
+        findCandidateOrDie(ic, "清");
+        FCITX_ASSERT(findCandidate(ic, "青") < 0);
+
+        setCandidateFilter("Stroke and Chaizi");
+
+        uuid = testfrontend->call<ITestFrontend::createInputContext>("testapp");
+        ic = instance->inputContextManager().findByUUID(uuid);
+        FCITX_ASSERT(ic);
+        instance->setCurrentInputMethod(ic, "pinyin", true);
+
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("q"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("i"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("n"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("g"), false);
+        findCandidateOrDie(ic, "清");
+        findCandidateOrDie(ic, "青");
+
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("`"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("h"), false);
+        findCandidateOrDie(ic, "青");
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("BACKSPACE"),
+                                                    false);
+
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("s"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("h"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("u"), false);
+        testfrontend->call<ITestFrontend::keyEvent>(uuid, Key("i"), false);
+        findCandidateOrDie(ic, "清");
+        FCITX_ASSERT(findCandidate(ic, "青") < 0);
+
+        setCandidateFilter("Stroke");
+    });
+}
+
 void testPin(Instance *instance) {
     instance->eventDispatcher().schedule([instance]() {
         auto *testfrontend = instance->addonManager().addon("testfrontend");
@@ -645,8 +725,9 @@ int main() {
     testSelectByChar(&instance);
     testUppercase(&instance);
     testForget(&instance);
-    testActionInStrokeFilter(&instance);
     testPinyinTabFilter(&instance);
+    testActionInStrokeFilter(&instance);
+    testChaiziFilter(&instance);
     testPin(&instance);
     testQuickPhraseTrigger(&instance);
     testVQuickPhraseTrigger(&instance);

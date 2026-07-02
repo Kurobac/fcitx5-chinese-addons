@@ -21,6 +21,7 @@ public:
 
     void load(std::istream &in);
     void clear();
+    bool empty() const { return index_.empty(); }
 
     const std::vector<std::string> *lookup(std::string_view hanzi) const;
     bool match(std::string_view hanzi, std::string_view code) const;

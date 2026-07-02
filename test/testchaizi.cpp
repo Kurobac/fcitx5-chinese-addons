@@ -29,13 +29,15 @@ int main() {
     const std::string sourceChaizi =
         std::string(TESTING_SOURCE_DIR) + "/im/pinyin/chaizi.txt";
     const std::string filteredChaizi =
-        std::string(TESTING_BINARY_DIR) + "/im/pinyin/chaizi.txt";
+        std::string(TESTING_BINARY_DIR) + "/im/pinyin/chaizi-filtered.txt";
 
     std::ifstream in(sourceChaizi);
     FCITX_ASSERT(in.is_open());
 
     fcitx::ChaiziIndex index;
+    FCITX_ASSERT(index.empty());
     index.load(in);
+    FCITX_ASSERT(!index.empty());
 
     struct TestCase {
         std::string hanzi;
@@ -69,6 +71,8 @@ int main() {
 
     FCITX_ASSERT(fcitx::ChaiziIndex::normalizeCode("shui'qing") == "shuiqing");
     FCITX_ASSERT(!index.match("清", "rener"));
+    index.clear();
+    FCITX_ASSERT(index.empty());
 
     return 0;
 }
