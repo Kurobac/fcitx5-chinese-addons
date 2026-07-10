@@ -1,5 +1,6 @@
 set(PINYIN_SOURCES
     pinyin.cpp
+    chaizifilter.cpp
     chaizi.cpp
     customphrase.cpp
     symboldictionary.cpp

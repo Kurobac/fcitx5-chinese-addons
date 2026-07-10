@@ -10,6 +10,7 @@
 // Use relative path so we don't need import export target.
 // We want to keep cloudpinyin logic but don't call it.
 #include "../../modules/cloudpinyin/cloudpinyin_public.h"
+#include "chaizifilter.h"
 #include "config.h"
 #include "customphrase.h"
 #include "notifications_public.h"
@@ -1574,8 +1575,9 @@ void PinyinEngine::updateFilter(InputContext *inputContext) {
     auto input = state->filter_.buffer_.userInput();
     auto strokeInput =
         candidateFilterUsesStroke(filterSet) ? strokeFilterInput(input) : "";
-    auto chaiziInput =
-        candidateFilterUsesChaizi(filterSet) ? chaiziFilterInput(state) : "";
+    auto chaiziInputs = candidateFilterUsesChaizi(filterSet)
+                            ? chaiziFilterInputs(state)
+                            : std::vector<std::string>{};
 
     updatePreedit(inputContext);
     Text aux;
@@ -1609,7 +1611,7 @@ void PinyinEngine::updateFilter(InputContext *inputContext) {
             candidateList->clearFilter();
         } else {
             candidateList->setFilter([this, pinyinTabbed, strokeInput,
-                                      chaiziInput,
+                                      chaiziInputs,
                                       state](const CandidateWord &candidate)
                                          -> bool {
                 if (pinyinTabbed && !pinyinTabbed->filter(candidate)) {
@@ -1642,8 +1644,11 @@ void PinyinEngine::updateFilter(InputContext *inputContext) {
                         }
                     }
                 }
-                return !chaiziInput.empty() &&
-                       chaiziFilter_.matchAnyChar(str, chaiziInput);
+                return std::any_of(
+                    chaiziInputs.begin(), chaiziInputs.end(),
+                    [this, &str](const std::string &chaiziInput) {
+                        return chaiziFilter_.matchAnyChar(str, chaiziInput);
+                    });
             });
         }
 
@@ -2077,10 +2082,14 @@ void PinyinEngine::resetPredict(InputContext *inputContext) {
     inputContext->updateUserInterface(UserInterfaceComponent::InputPanel);
 }
 
-std::string PinyinEngine::chaiziFilterInput(const PinyinState *state) const {
+std::vector<std::string>
+PinyinEngine::chaiziFilterInputs(const PinyinState *state) const {
     auto input = state->filter_.buffer_.userInput();
-    if (input.empty() || !state->context_.useShuangpin()) {
-        return input;
+    if (input.empty()) {
+        return {};
+    }
+    if (!state->context_.useShuangpin()) {
+        return {input};
     }
 
     auto shuangpinProfile = ime_->shuangpinProfile();
@@ -2088,24 +2097,7 @@ std::string PinyinEngine::chaiziFilterInput(const PinyinState *state) const {
         return {};
     }
 
-    std::string result;
-    for (size_t i = 0; i < input.size(); i += 2) {
-        auto syls = libime::PinyinEncoder::shuangpinToSyllablesWithFuzzyFlags(
-            std::string_view(input).substr(
-                i, std::min<size_t>(2, input.size() - i)),
-            *shuangpinProfile, ime_->fuzzyFlags());
-        if (syls.empty() || syls.front().second.empty()) {
-            return {};
-        }
-
-        auto pinyin = libime::PinyinEncoder::initialFinalToPinyinString(
-            syls.front().first, syls.front().second.front().first);
-        if (pinyin.empty()) {
-            return {};
-        }
-        result.append(pinyin);
-    }
-    return result;
+    return shuangpinToChaiziFilterInputs(input, *shuangpinProfile);
 }
 
 void PinyinEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {

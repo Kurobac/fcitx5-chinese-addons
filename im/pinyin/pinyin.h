@@ -502,7 +502,8 @@ private:
     void updateForgetCandidate(InputContext *inputContext);
 
     void updatePreedit(InputContext *inputContext) const;
-    std::string chaiziFilterInput(const PinyinState *state) const;
+    std::vector<std::string>
+    chaiziFilterInputs(const PinyinState *state) const;
     void updatePuncCandidate(InputContext *inputContext,
                              const std::string &original,
                              const std::vector<std::string> &candidates) const;
